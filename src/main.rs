@@ -9,7 +9,10 @@ use glutin::{
 };
 
 use core::mem::{size_of, size_of_val};
+use std::ffi::CString;
 use std::fs;
+use std::os::raw::c_float;
+use std::time::Instant;
 
 struct Color {
     r: f32,
@@ -211,6 +214,11 @@ impl ShaderProgram {
         glUseProgram(self.id);
     }
 
+    fn get_uniform_location(&self, name: &str) -> i32 {
+        let c_name = CString::new(name).unwrap();
+        unsafe { glGetUniformLocation(self.id, c_name.as_ptr().cast()) }
+    }
+
     fn check_linking_status(&self) -> Result<(), ()> {
         unsafe {
             let mut success = 0;
@@ -235,20 +243,15 @@ impl ShaderProgram {
 }
 
 type Vertex = [f32; 3];
-const TRIANGLE_1: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.25, 0.0]];
-const TRIANGLE_2: [Vertex; 9] = [
-    // top right triangle
-    [0.5, -0.5, 0.0],
-    [0.0, 0.25, 0.0],
-    [0.5, 0.5, 0.0],
-    // top left triangle
+const TRIANGLE: [Vertex; 6] = [
+    // pos
     [-0.5, -0.5, 0.0],
-    [0.0, 0.25, 0.0],
-    [-0.5, 0.5, 0.0],
-    // bottom triangle
-    [-0.5, -0.5, 0.0],
+    // color
+    [1.0, 0.0, 0.0],
     [0.5, -0.5, 0.0],
-    [0.0, -0.75, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 0.25, 0.0],
+    [0.0, 0.0, 1.0],
 ];
 
 fn clear_color(color: &Color) {
@@ -279,66 +282,46 @@ fn main() {
 
     clear_color(&Color::from(0.2, 0.3, 0.3));
 
-    let vao_1 = VAO::new().unwrap();
-    vao_1.bind();
+    let vao = VAO::new().unwrap();
+    vao.bind();
 
-    let vbo_1 = VBO::new(BufferType::Array).unwrap();
-    vbo_1.bind();
-
-    unsafe {
-        glBufferData(
-            GL_ARRAY_BUFFER,
-            size_of_val(&TRIANGLE_1) as isize,
-            TRIANGLE_1.as_ptr().cast(),
-            GL_STATIC_DRAW,
-        );
-
-        glVertexAttribPointer(
-            0,
-            3,
-            GL_FLOAT,
-            0,
-            size_of::<Vertex>().try_into().unwrap(),
-            0 as *const _,
-        );
-        glEnableVertexAttribArray(0);
-    }
-
-    let vao_2 = VAO::new().unwrap();
-    vao_2.bind();
-
-    let vbo_2 = VBO::new(BufferType::Array).unwrap();
-    vbo_2.bind();
+    let vbo = VBO::new(BufferType::Array).unwrap();
+    vbo.bind();
 
     unsafe {
         glBufferData(
             GL_ARRAY_BUFFER,
-            size_of_val(&TRIANGLE_2) as isize,
-            TRIANGLE_2.as_ptr().cast(),
+            size_of_val(&TRIANGLE) as isize,
+            TRIANGLE.as_ptr().cast(),
             GL_STATIC_DRAW,
         );
 
+        let vertex_size: i32 = size_of::<Vertex>().try_into().unwrap();
+
+        // position attribute
+        glVertexAttribPointer(0, 3, GL_FLOAT, 0, 2 * vertex_size, 0 as *const _);
+
         glVertexAttribPointer(
-            0,
+            1,
             3,
             GL_FLOAT,
             0,
-            size_of::<Vertex>().try_into().unwrap(),
-            0 as *const _,
+            2 * vertex_size,
+            (3 * size_of::<c_float>()) as *const _,
         );
+
         glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
     }
 
-    let shader_program_1 =
+    let shader_program =
         ShaderProgram::from_files("vertex_shader.vs", "fragment_shader.fs").unwrap();
-    shader_program_1.link();
+    shader_program.link();
 
-    let shader_program_2 =
-        ShaderProgram::from_files("vertex_shader.vs", "fragment_shader_2.fs").unwrap();
-    shader_program_2.link();
+    let start_time = Instant::now();
 
     el.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
 
         match event {
             Event::LoopDestroyed => return,
@@ -347,16 +330,13 @@ fn main() {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                 _ => (),
             },
+            Event::MainEventsCleared => context.window().request_redraw(),
             Event::RedrawRequested(_) => unsafe {
                 glClear(GL_COLOR_BUFFER_BIT);
 
-                shader_program_1.use_program();
-                vao_1.bind();
+                vao.bind();
+                shader_program.use_program();
                 glDrawArrays(GL_TRIANGLES, 0, 3);
-
-                shader_program_2.use_program();
-                vao_2.bind();
-                glDrawArrays(GL_TRIANGLES, 0, 9);
 
                 VAO::clear_binding();
 
