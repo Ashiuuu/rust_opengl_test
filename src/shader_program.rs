@@ -1,6 +1,8 @@
 use gl33::global_loader::*;
 use gl33::*;
 
+use glm::Mat4;
+
 use std::ffi::CString;
 use std::fs;
 
@@ -132,6 +134,12 @@ impl ShaderProgram {
     pub fn set_float(&self, name: &str, v0: f32) {
         unsafe {
             glUniform1f(self.get_uniform_location(name), v0);
+        }
+    }
+
+    pub fn set_mat4(&self, name: &str, v0: &Mat4) {
+        unsafe {
+            glUniformMatrix4fv(self.get_uniform_location(name), 1, 0, v0.as_ptr().cast());
         }
     }
 

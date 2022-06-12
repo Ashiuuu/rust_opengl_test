@@ -2,9 +2,12 @@
 mod shader_program;
 mod vertex_objects;
 
+extern crate nalgebra_glm as glm;
+
 use gl33::global_loader::*;
 use gl33::*;
 
+use glm::Mat4;
 use glutin::{
     event::{Event, KeyboardInput, ScanCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -15,6 +18,7 @@ use glutin::{
 use core::cmp::{max, min};
 use core::mem::{size_of, size_of_val};
 use image::{io::Reader as ImageReader, ColorType};
+use std::f32::consts::PI;
 use std::time::Instant;
 
 use shader_program::ShaderProgram;
@@ -30,6 +34,16 @@ impl Color {
     fn from(r: f32, g: f32, b: f32) -> Self {
         Self { r, g, b }
     }
+}
+
+fn identity_mat4() -> Mat4 {
+    glm::mat4(
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    )
+}
+
+fn to_radians(e: f32) -> f32 {
+    e * PI / 180.0
 }
 
 struct Texture2D {
@@ -85,12 +99,20 @@ impl Texture2D {
 }
 
 type Vertex = [f32; 3];
-// Pos[f32;3] Color[f32;3] TexturePos[f32;2]
-const RECTANGLE_VERTICES: [f32; 32] = [
-    0.5, 0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.5, -0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -0.5, -0.5,
-    0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -0.5, 0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+
+const CUBE: [f32; 180] = [
+    -0.5, -0.5, -0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5,
+    -0.5, 1.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 0.0,
+    0.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5,
+    0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, 0.5, 0.5, 1.0, 0.0, -0.5, 0.5, -0.5, 1.0, 1.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, 0.5,
+    0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, -0.5, -0.5, 0.0, 1.0,
+    0.5, -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, 0.5, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, -0.5, -0.5, -0.5,
+    0.0, 1.0, 0.5, -0.5, -0.5, 1.0, 1.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.5, -0.5, 0.5, 1.0, 0.0, -0.5,
+    -0.5, 0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, 0.5, 0.5, -0.5,
+    1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, -0.5, 0.5, 0.5, 0.0, 0.0, -0.5,
+    0.5, -0.5, 0.0, 1.0,
 ];
-const RECTANGLE_INDICES: [u32; 6] = [0, 1, 3, 1, 2, 3];
 
 fn clear_color(color: &Color) {
     unsafe {
@@ -122,6 +144,9 @@ fn main() {
 
     let context = unsafe { context.make_current().unwrap() };
 
+    let window_width = context.window().inner_size().width as f32;
+    let window_height = context.window().inner_size().height as f32;
+
     // Load OpenGL symbols
     unsafe {
         load_global_gl(&|ptr| {
@@ -132,6 +157,7 @@ fn main() {
     };
 
     unsafe {
+        glEnable(GL_DEPTH_TEST);
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_MIN_FILTER,
@@ -144,16 +170,26 @@ fn main() {
         );
     }
 
-    let mut transparancy = 0.2;
-    let step = 0.01;
-
     clear_color(&Color::from(0.2, 0.3, 0.3));
+
+    let cube_positions = [
+        glm::vec3(0.0, 0.0, 0.0),
+        glm::vec3(2.0, 5.0, -15.0),
+        glm::vec3(-1.5, -2.2, -2.5),
+        glm::vec3(-3.8, -2.0, -12.3),
+        glm::vec3(2.4, -0.4, -3.5),
+        glm::vec3(-1.7, 3.0, -7.5),
+        glm::vec3(1.3, -2.0, -2.5),
+        glm::vec3(1.5, 2.0, -2.5),
+        glm::vec3(1.5, 0.2, -1.5),
+        glm::vec3(-1.3, 1.0, -1.5),
+    ];
 
     let vao = VAO::new().unwrap();
     vao.bind();
 
     let vbo = VBO::new(BufferType::Array).unwrap();
-    let ebo = VBO::new(BufferType::ElementArray).unwrap();
+    //let ebo = VBO::new(BufferType::ElementArray).unwrap();
 
     let texture_1 = Texture2D::from_image("container.jpg");
     let texture_2 = Texture2D::from_image("awesomeface.png");
@@ -162,37 +198,35 @@ fn main() {
         vbo.bind();
         glBufferData(
             GL_ARRAY_BUFFER,
-            size_of_val(&RECTANGLE_VERTICES) as isize,
-            RECTANGLE_VERTICES.as_ptr().cast(),
+            size_of_val(&CUBE) as isize,
+            CUBE.as_ptr().cast(),
             GL_STATIC_DRAW,
         );
 
-        ebo.bind();
-        glBufferData(
-            GL_ELEMENT_ARRAY_BUFFER,
-            size_of_val(&RECTANGLE_INDICES) as isize,
-            RECTANGLE_INDICES.as_ptr().cast(),
-            GL_STATIC_DRAW,
-        );
+        //ebo.bind();
+        //glBufferData(
+        //GL_ELEMENT_ARRAY_BUFFER,
+        //size_of_val(&CUBE_INDICES) as isize,
+        //CUBE_INDICES.as_ptr().cast(),
+        //GL_STATIC_DRAW,
+        //);
 
         let float_size: i32 = size_of::<f32>().try_into().unwrap();
-        let stride = 8 * float_size;
+        let stride = 5 * float_size;
 
         // position attribute
         glVertexAttribPointer(0, 3, GL_FLOAT, 0, stride, 0 as *const _);
-        glVertexAttribPointer(1, 3, GL_FLOAT, 0, stride, size_of::<Vertex>() as *const _);
         glVertexAttribPointer(
-            2,
+            1,
             2,
             GL_FLOAT,
             0,
             stride,
-            (2_i32 * (size_of::<Vertex>() as i32)) as *const _,
+            (size_of::<Vertex>() as i32) as *const _,
         );
 
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
 
         texture_1.bind();
         glTexParameteri(
@@ -228,27 +262,13 @@ fn main() {
                     input: kb_input,
                     is_synthetic: false,
                 } => match kb_input.scancode {
-                    57416 => {
-                        transparancy = if transparancy - step < 0.0 {
-                            0.0
-                        } else {
-                            transparancy - step
-                        }
-                    }
-                    57424 => {
-                        transparancy = if transparancy + step > 1.0 {
-                            1.0
-                        } else {
-                            transparancy + step
-                        }
-                    }
                     _ => (),
                 },
                 _ => (),
             },
             Event::MainEventsCleared => context.window().request_redraw(),
             Event::RedrawRequested(_) => unsafe {
-                glClear(GL_COLOR_BUFFER_BIT);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                 vao.bind();
                 shader_program.use_program();
@@ -259,8 +279,41 @@ fn main() {
 
                 shader_program.set_int("texture1", 0);
                 shader_program.set_int("texture2", 1);
-                shader_program.set_float("transparancy", transparancy);
-                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0 as *const _);
+                let elapsed_time = start_time.elapsed().as_secs_f32();
+
+                let projection_matrix =
+                    glm::perspective(to_radians(45.0), window_width / window_height, 0.1, 100.0);
+
+                let view_matrix = identity_mat4();
+                let view_matrix = glm::translate(
+                    &view_matrix,
+                    &glm::vec3(0.0, 0.0, -3.0 + elapsed_time.sin()),
+                );
+
+                shader_program.set_mat4("projection", &projection_matrix);
+                shader_program.set_mat4("view", &view_matrix);
+
+                let mut angle = 0.0;
+                for (i, pos) in cube_positions.into_iter().enumerate() {
+                    let model = identity_mat4();
+                    let model = glm::translate(&model, &pos);
+
+                    angle += 20.0;
+                    let model = if i % 3 == 0 {
+                        glm::rotate(
+                            &model,
+                            to_radians(angle) + elapsed_time,
+                            &glm::vec3(i as f32, 0.3, 0.5),
+                        )
+                    } else {
+                        glm::rotate(&model, to_radians(angle), &glm::vec3(1.0, 0.3, 0.5))
+                    };
+                    shader_program.set_mat4("model", &model);
+
+                    glDrawArrays(GL_TRIANGLES, 0, 180);
+                }
+
+                //glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0 as *const _);
 
                 VAO::clear_binding();
 
