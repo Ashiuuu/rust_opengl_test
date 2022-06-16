@@ -7,19 +7,20 @@ extern crate nalgebra_glm as glm;
 use gl33::global_loader::*;
 use gl33::*;
 
+use lazy_static::lazy_static;
+
 use glm::Mat4;
 use glutin::{
-    event::{Event, KeyboardInput, ScanCode, WindowEvent},
+    dpi::LogicalPosition,
+    event::{DeviceEvent, ElementState, Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
     Api, ContextBuilder, GlRequest,
 };
 
-use core::cmp::{max, min};
 use core::mem::{size_of, size_of_val};
 use image::{io::Reader as ImageReader, ColorType};
-use std::f32::consts::PI;
-use std::time::Instant;
+use std::{f32::consts::PI, time::Instant};
 
 use shader_program::ShaderProgram;
 use vertex_objects::{BufferType, VAO, VBO};
@@ -36,10 +37,15 @@ impl Color {
     }
 }
 
-fn identity_mat4() -> Mat4 {
-    glm::mat4(
-        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-    )
+//fn identity_mat4() -> Mat4 {
+//glm::mat4(
+//1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+//)
+//}
+
+lazy_static! {
+    static ref IDENTITY_MAT4: Mat4 =
+        glm::mat4(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,);
 }
 
 fn to_radians(e: f32) -> f32 {
@@ -172,6 +178,19 @@ fn main() {
 
     clear_color(&Color::from(0.2, 0.3, 0.3));
 
+    let mut camera_pos = glm::vec3(0.0, 0.0, 3.0);
+    let mut camera_front = glm::vec3(0.0, 0.0, -1.0);
+    let mut camera_up = glm::vec3(0.0, 1.0, 0.0);
+
+    let mut pitch = 0.0;
+    let mut yaw = -90.0;
+    let sensitivity = 0.5;
+
+    let mut forward = false;
+    let mut backward = false;
+    let mut right = false;
+    let mut left = false;
+
     let cube_positions = [
         glm::vec3(0.0, 0.0, 0.0),
         glm::vec3(2.0, 5.0, -15.0),
@@ -247,7 +266,7 @@ fn main() {
         ShaderProgram::from_files("vertex_shader.vs", "fragment_shader.fs").unwrap();
     shader_program.link();
 
-    let start_time = Instant::now();
+    let mut last_frame = Instant::now();
 
     el.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -257,18 +276,79 @@ fn main() {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(physical_size) => context.resize(physical_size),
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                WindowEvent::KeyboardInput {
-                    device_id: _,
-                    input: kb_input,
-                    is_synthetic: false,
-                } => match kb_input.scancode {
-                    _ => (),
-                },
                 _ => (),
             },
-            Event::MainEventsCleared => context.window().request_redraw(),
-            Event::RedrawRequested(_) => unsafe {
+            Event::DeviceEvent { event, .. } => match event {
+                DeviceEvent::MouseMotion { delta: (dx, dy) } => {
+                    yaw += (dx as f32) * sensitivity;
+                    pitch -= (dy as f32) * sensitivity;
+                    context
+                        .window()
+                        .set_cursor_position(LogicalPosition::new(
+                            window_width / 2.0,
+                            window_height / 2.0,
+                        ))
+                        .unwrap();
+                }
+                DeviceEvent::Key(key) => {
+                    if let Some(key_code) = key.virtual_keycode {
+                        match key_code {
+                            VirtualKeyCode::W => match key.state {
+                                ElementState::Pressed => forward = true,
+                                ElementState::Released => forward = false,
+                            },
+                            VirtualKeyCode::S => match key.state {
+                                ElementState::Pressed => backward = true,
+                                ElementState::Released => backward = false,
+                            },
+                            VirtualKeyCode::D => match key.state {
+                                ElementState::Pressed => right = true,
+                                ElementState::Released => right = false,
+                            },
+                            VirtualKeyCode::A => match key.state {
+                                ElementState::Pressed => left = true,
+                                ElementState::Released => left = false,
+                            },
+                            VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
+                            _ => (),
+                        }
+                    }
+                }
+                _ => (),
+            },
+            Event::MainEventsCleared => unsafe {
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                let dt = last_frame.elapsed().as_secs_f32();
+                last_frame = Instant::now();
+
+                let camera_speed = 2.5 * dt;
+
+                // camera handling
+                if forward {
+                    camera_pos += camera_speed * camera_front;
+                } else if backward {
+                    camera_pos -= camera_speed * camera_front;
+                }
+                if right {
+                    camera_pos +=
+                        glm::normalize(&glm::cross(&camera_front, &camera_up)) * camera_speed
+                } else if left {
+                    camera_pos -=
+                        glm::normalize(&glm::cross(&camera_front, &camera_up)) * camera_speed
+                }
+
+                if pitch > 89.0 {
+                    pitch = 89.0;
+                } else if pitch < -89.0 {
+                    pitch = -89.0;
+                }
+                let camera_direction = glm::vec3(
+                    to_radians(yaw).cos() * to_radians(pitch).cos(),
+                    to_radians(pitch).sin(),
+                    to_radians(yaw).sin() * to_radians(pitch).cos(),
+                );
+                camera_front = glm::normalize(&camera_direction);
 
                 vao.bind();
                 shader_program.use_program();
@@ -279,30 +359,25 @@ fn main() {
 
                 shader_program.set_int("texture1", 0);
                 shader_program.set_int("texture2", 1);
-                let elapsed_time = start_time.elapsed().as_secs_f32();
 
                 let projection_matrix =
                     glm::perspective(to_radians(45.0), window_width / window_height, 0.1, 100.0);
 
-                let view_matrix = identity_mat4();
-                let view_matrix = glm::translate(
-                    &view_matrix,
-                    &glm::vec3(0.0, 0.0, -3.0 + elapsed_time.sin()),
-                );
+                let camera_view =
+                    glm::look_at(&camera_pos, &(camera_pos + camera_front), &camera_up);
 
                 shader_program.set_mat4("projection", &projection_matrix);
-                shader_program.set_mat4("view", &view_matrix);
+                shader_program.set_mat4("view", &camera_view);
 
                 let mut angle = 0.0;
                 for (i, pos) in cube_positions.into_iter().enumerate() {
-                    let model = identity_mat4();
-                    let model = glm::translate(&model, &pos);
+                    let model = glm::translate(&IDENTITY_MAT4, &pos);
 
-                    angle += 20.0;
+                    angle += 10.0;
                     let model = if i % 3 == 0 {
                         glm::rotate(
                             &model,
-                            to_radians(angle) + elapsed_time,
+                            to_radians(angle) + dt,
                             &glm::vec3(i as f32, 0.3, 0.5),
                         )
                     } else {
