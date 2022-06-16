@@ -1,4 +1,4 @@
-#[allow(dead_code)]
+mod camera;
 mod shader_program;
 mod vertex_objects;
 
@@ -22,6 +22,7 @@ use core::mem::{size_of, size_of_val};
 use image::{io::Reader as ImageReader, ColorType};
 use std::{f32::consts::PI, time::Instant};
 
+use camera::Camera;
 use shader_program::ShaderProgram;
 use vertex_objects::{BufferType, VAO, VBO};
 
@@ -37,11 +38,53 @@ impl Color {
     }
 }
 
-//fn identity_mat4() -> Mat4 {
-//glm::mat4(
-//1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-//)
-//}
+pub enum KeyState {
+    Pressed,
+    Released,
+}
+
+impl KeyState {
+    fn is_pressed(&self) -> bool {
+        match self {
+            Self::Pressed => true,
+            _ => false,
+        }
+    }
+
+    fn is_released(&self) -> bool {
+        match self {
+            Self::Released => true,
+            _ => false,
+        }
+    }
+}
+
+impl From<ElementState> for KeyState {
+    fn from(e: ElementState) -> Self {
+        match e {
+            ElementState::Pressed => Self::Pressed,
+            ElementState::Released => Self::Released,
+        }
+    }
+}
+
+pub struct MovementState {
+    pub forward: KeyState,
+    pub backward: KeyState,
+    pub right: KeyState,
+    pub left: KeyState,
+}
+
+impl MovementState {
+    fn new() -> Self {
+        Self {
+            forward: KeyState::Released,
+            backward: KeyState::Released,
+            right: KeyState::Released,
+            left: KeyState::Released,
+        }
+    }
+}
 
 lazy_static! {
     static ref IDENTITY_MAT4: Mat4 =
@@ -178,18 +221,9 @@ fn main() {
 
     clear_color(&Color::from(0.2, 0.3, 0.3));
 
-    let mut camera_pos = glm::vec3(0.0, 0.0, 3.0);
-    let mut camera_front = glm::vec3(0.0, 0.0, -1.0);
-    let mut camera_up = glm::vec3(0.0, 1.0, 0.0);
+    let mut camera = Camera::new();
 
-    let mut pitch = 0.0;
-    let mut yaw = -90.0;
-    let sensitivity = 0.5;
-
-    let mut forward = false;
-    let mut backward = false;
-    let mut right = false;
-    let mut left = false;
+    let mut movement_state = MovementState::new();
 
     let cube_positions = [
         glm::vec3(0.0, 0.0, 0.0),
@@ -267,6 +301,7 @@ fn main() {
     shader_program.link();
 
     let mut last_frame = Instant::now();
+    let start = Instant::now();
 
     el.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -280,8 +315,7 @@ fn main() {
             },
             Event::DeviceEvent { event, .. } => match event {
                 DeviceEvent::MouseMotion { delta: (dx, dy) } => {
-                    yaw += (dx as f32) * sensitivity;
-                    pitch -= (dy as f32) * sensitivity;
+                    camera.update_orientation(dx as f32, dy as f32);
                     context
                         .window()
                         .set_cursor_position(LogicalPosition::new(
@@ -293,22 +327,10 @@ fn main() {
                 DeviceEvent::Key(key) => {
                     if let Some(key_code) = key.virtual_keycode {
                         match key_code {
-                            VirtualKeyCode::W => match key.state {
-                                ElementState::Pressed => forward = true,
-                                ElementState::Released => forward = false,
-                            },
-                            VirtualKeyCode::S => match key.state {
-                                ElementState::Pressed => backward = true,
-                                ElementState::Released => backward = false,
-                            },
-                            VirtualKeyCode::D => match key.state {
-                                ElementState::Pressed => right = true,
-                                ElementState::Released => right = false,
-                            },
-                            VirtualKeyCode::A => match key.state {
-                                ElementState::Pressed => left = true,
-                                ElementState::Released => left = false,
-                            },
+                            VirtualKeyCode::W => movement_state.forward = key.state.into(),
+                            VirtualKeyCode::S => movement_state.backward = key.state.into(),
+                            VirtualKeyCode::D => movement_state.right = key.state.into(),
+                            VirtualKeyCode::A => movement_state.left = key.state.into(),
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
                             _ => (),
                         }
@@ -321,34 +343,10 @@ fn main() {
 
                 let dt = last_frame.elapsed().as_secs_f32();
                 last_frame = Instant::now();
-
-                let camera_speed = 2.5 * dt;
+                let elapsed = start.elapsed().as_secs_f32();
 
                 // camera handling
-                if forward {
-                    camera_pos += camera_speed * camera_front;
-                } else if backward {
-                    camera_pos -= camera_speed * camera_front;
-                }
-                if right {
-                    camera_pos +=
-                        glm::normalize(&glm::cross(&camera_front, &camera_up)) * camera_speed
-                } else if left {
-                    camera_pos -=
-                        glm::normalize(&glm::cross(&camera_front, &camera_up)) * camera_speed
-                }
-
-                if pitch > 89.0 {
-                    pitch = 89.0;
-                } else if pitch < -89.0 {
-                    pitch = -89.0;
-                }
-                let camera_direction = glm::vec3(
-                    to_radians(yaw).cos() * to_radians(pitch).cos(),
-                    to_radians(pitch).sin(),
-                    to_radians(yaw).sin() * to_radians(pitch).cos(),
-                );
-                camera_front = glm::normalize(&camera_direction);
+                camera.update_movement(&movement_state, dt);
 
                 vao.bind();
                 shader_program.use_program();
@@ -363,8 +361,7 @@ fn main() {
                 let projection_matrix =
                     glm::perspective(to_radians(45.0), window_width / window_height, 0.1, 100.0);
 
-                let camera_view =
-                    glm::look_at(&camera_pos, &(camera_pos + camera_front), &camera_up);
+                let camera_view = camera.view_matrix();
 
                 shader_program.set_mat4("projection", &projection_matrix);
                 shader_program.set_mat4("view", &camera_view);
@@ -377,7 +374,7 @@ fn main() {
                     let model = if i % 3 == 0 {
                         glm::rotate(
                             &model,
-                            to_radians(angle) + dt,
+                            to_radians(angle) + elapsed,
                             &glm::vec3(i as f32, 0.3, 0.5),
                         )
                     } else {
