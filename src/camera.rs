@@ -4,7 +4,7 @@ use crate::to_radians;
 use crate::MovementState;
 
 pub struct Camera {
-    position: TVec3<f32>,
+    pub position: TVec3<f32>,
     front: TVec3<f32>,
     right: TVec3<f32>,
     up: TVec3<f32>,

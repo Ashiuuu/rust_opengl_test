@@ -1,7 +1,7 @@
 use gl33::global_loader::*;
 use gl33::*;
 
-use glm::Mat4;
+use glm::{Mat4, Vec3, Vec4};
 
 use std::ffi::CString;
 use std::fs;
@@ -74,9 +74,12 @@ impl Shader {
 
     fn error_log(&self) -> String {
         unsafe {
-            let mut v: Vec<u8> = Vec::with_capacity(1024);
-            let mut log_len = 0_i32;
-            glGetShaderInfoLog(self.id, 1024, &mut log_len, v.as_mut_ptr().cast());
+            let mut needed_len = 0;
+            glGetShaderiv(self.id, GL_INFO_LOG_LENGTH, &mut needed_len);
+            let mut v: Vec<u8> = Vec::with_capacity(needed_len.try_into().unwrap());
+            let mut written_len = 0_i32;
+            glGetShaderInfoLog(self.id, needed_len, &mut written_len, v.as_mut_ptr().cast());
+            v.set_len(written_len.try_into().unwrap());
             String::from_utf8_lossy(&v).to_string()
         }
     }
@@ -134,6 +137,18 @@ impl ShaderProgram {
     pub fn set_float(&self, name: &str, v0: f32) {
         unsafe {
             glUniform1f(self.get_uniform_location(name), v0);
+        }
+    }
+
+    pub fn set_vec3(&self, name: &str, v0: Vec3) {
+        unsafe {
+            glUniform3fv(self.get_uniform_location(name), 1, v0.as_ptr().cast());
+        }
+    }
+
+    pub fn set_vec4(&self, name: &str, v0: Vec4) {
+        unsafe {
+            glUniform4fv(self.get_uniform_location(name), 1, v0.as_ptr().cast());
         }
     }
 

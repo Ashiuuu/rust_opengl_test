@@ -5,15 +5,18 @@ pub struct VAO {
     vao: u32,
 }
 
+#[derive(Debug)]
+pub struct VAOCreationFail {}
+
 impl VAO {
-    pub fn new() -> Option<Self> {
+    pub fn new() -> Result<Self, VAOCreationFail> {
         let mut vao = 0;
         unsafe {
             glGenVertexArrays(1, &mut vao);
             if vao != 0 {
-                Some(Self { vao })
+                Ok(Self { vao })
             } else {
-                None
+                Err(VAOCreationFail {})
             }
         }
     }
@@ -27,6 +30,7 @@ impl VAO {
     }
 }
 
+#[derive(Debug)]
 pub enum BufferType {
     Array,
     ElementArray,
@@ -41,24 +45,27 @@ impl From<&BufferType> for gl33::GLenum {
     }
 }
 
+#[derive(Debug)]
+pub struct VBOCreationFail(pub BufferType);
+
 pub struct VBO {
     id: u32,
     buffer_type: BufferType,
 }
 
 impl VBO {
-    pub fn new(buffer_type: BufferType) -> Option<Self> {
+    pub fn new(buffer_type: BufferType) -> Result<Self, VBOCreationFail> {
         let mut vbo = 0;
         unsafe {
             glGenBuffers(1, &mut vbo);
         }
         if vbo != 0 {
-            Some(Self {
+            Ok(Self {
                 id: vbo,
                 buffer_type,
             })
         } else {
-            None
+            Err(VBOCreationFail(buffer_type))
         }
     }
 
@@ -68,9 +75,9 @@ impl VBO {
         }
     }
 
-    pub fn clear_binding(&self) {
+    pub fn clear_binding() {
         unsafe {
-            glBindBuffer((&self.buffer_type).into(), 0);
+            glBindBuffer((&BufferType::Array).into(), 0);
         }
     }
 }
