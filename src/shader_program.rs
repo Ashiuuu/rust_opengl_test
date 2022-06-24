@@ -99,14 +99,17 @@ impl ShaderProgram {
         let fragment_shader = Shader::from_file(fragment_filename, ShaderType::FragmentShader)?;
         glAttachShader(id, fragment_shader.id);
 
-        Some(Self {
+        let shader = Self {
             id,
             vertex_shader,
             fragment_shader,
-        })
+        };
+
+        shader.link();
+        Some(shader)
     }
 
-    pub fn link(&self) {
+    fn link(&self) {
         self.vertex_shader.compile();
         self.fragment_shader.compile();
         glLinkProgram(self.id);
