@@ -9,14 +9,14 @@ pub struct VAO {
 pub struct VAOCreationFail {}
 
 impl VAO {
-    pub fn new() -> Result<Self, VAOCreationFail> {
+    pub fn new() -> Self {
         let mut vao = 0;
         unsafe {
             glGenVertexArrays(1, &mut vao);
             if vao != 0 {
-                Ok(Self { vao })
+                Self { vao }
             } else {
-                Err(VAOCreationFail {})
+                Self { vao: 0 }
             }
         }
     }
@@ -46,26 +46,24 @@ impl From<&BufferType> for gl33::GLenum {
 }
 
 #[derive(Debug)]
-pub struct VBOCreationFail(pub BufferType);
-
 pub struct VBO {
     id: u32,
     buffer_type: BufferType,
 }
 
 impl VBO {
-    pub fn new(buffer_type: BufferType) -> Result<Self, VBOCreationFail> {
+    pub fn new(buffer_type: BufferType) -> Self {
         let mut vbo = 0;
         unsafe {
             glGenBuffers(1, &mut vbo);
         }
         if vbo != 0 {
-            Ok(Self {
+            Self {
                 id: vbo,
                 buffer_type,
-            })
+            }
         } else {
-            Err(VBOCreationFail(buffer_type))
+            Self { id: 0, buffer_type }
         }
     }
 

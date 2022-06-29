@@ -5,7 +5,7 @@ use gl33::{global_loader::*, *};
 
 use super::glenum_to_i32;
 
-#[derive(Display, Clone, Debug)]
+#[derive(Display, Clone)]
 pub enum TextureType {
     Diffuse,
     Specular,

@@ -1,12 +1,20 @@
-use glutin::{window::Window, ContextWrapper, NotCurrent, PossiblyCurrent};
+use std::ops::Sub;
+
+use static_camera::StaticCamera;
+use texture::Texture2D;
 
 mod camera;
+mod draw;
+mod framebuffer;
 mod key_state;
 mod lights;
 mod macros;
 mod mesh;
 mod model;
+mod plane;
+mod scene_object;
 mod shader_program;
+mod static_camera;
 mod texture;
 mod utils;
 mod vertex_objects;
@@ -15,28 +23,25 @@ extern crate nalgebra_glm as glm;
 
 use {
     camera::Camera,
+    framebuffer::Framebuffer,
     gl33::{global_loader::*, *},
-    glm::Mat4,
     glutin::{
         dpi::{LogicalPosition, LogicalSize},
         event::{DeviceEvent, Event, VirtualKeyCode, WindowEvent},
         event_loop::{ControlFlow, EventLoop},
+        window::Window,
         window::WindowBuilder,
-        Api, ContextBuilder, GlRequest,
+        Api, ContextBuilder, ContextWrapper, GlRequest, PossiblyCurrent,
     },
     key_state::MovementState,
-    lazy_static::lazy_static,
     model::Model,
+    plane::Plane,
+    scene_object::SceneObject,
     shader_program::ShaderProgram,
     std::time::Instant,
-    utils::{clear_color, glenum_to_i32, to_radians},
+    utils::*,
     vertex_objects::VAO,
 };
-
-lazy_static! {
-    static ref IDENTITY_MAT4: Mat4 =
-        glm::mat4(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,);
-}
 
 fn init_window(
     width: i32,
@@ -84,17 +89,62 @@ fn main() {
     // Window and OpenGL initialization
     let (el, context) = init_window(1600, 1080);
 
-    let window_width = context.window().inner_size().width as f32;
-    let window_height = context.window().inner_size().height as f32;
+    let window_width = context.window().inner_size().width;
+    let window_height = context.window().inner_size().height;
 
     init_opengl(&context);
 
     // Actual program starts here
-    let shader =
-        ShaderProgram::from_files("src\\model_loading.vs", "src\\model_loading.fs").unwrap();
-    let model = Model::new("backpack\\backpack.obj");
+    let shader = ShaderProgram::from_files("src\\model_loading.vs", "src\\model_loading.fs");
+
+    let mut model = SceneObject::new(Model::new("backpack\\backpack.obj"));
+    let mut normal_plane = SceneObject::new(Plane::new(vec![Texture2D::from_image(
+        "container.jpg",
+        ".",
+        texture::TextureType::Diffuse,
+    )]));
+    let mut back_plane = SceneObject::new(Plane::new(vec![Texture2D::from_image(
+        "ao.jpg",
+        "backpack",
+        texture::TextureType::Diffuse,
+    )]));
+
+    let mut quad = SceneObject::new(Plane::new(vec![]));
+    let mut quad2 = SceneObject::new(Plane::new(vec![]));
+
+    model.set_position(glm::vec3(0.0, -1.75, 0.0));
+    model.set_angle(45.0);
+
+    normal_plane.set_position(glm::vec3(0.0, 0.0, 5.0));
+    normal_plane.set_rotation_axis(glm::vec3(1.0, 0.0, 0.0));
+    normal_plane.set_angle(90.0);
+    normal_plane.set_scale(glm::vec3(10.0, 10.0, 1.0));
+
+    back_plane.set_position(glm::vec3(0.0, 0.0, 4.0));
+    back_plane.set_scale(glm::vec3(5.0, 5.0, 1.0));
+
+    quad.set_position(glm::vec3(1.0, 1.0, -8.0));
+    quad.set_scale(glm::vec3(5.0, 5.0, 1.0));
+
+    quad2.set_position(glm::vec3(0.0, 0.0, -8.0));
+    quad2.set_rotation_axis(glm::vec3(0.0, 1.0, 0.0));
+    quad2.set_angle(90.0);
+    quad2.set_scale(glm::vec3(5.0, 5.0, 1.0));
+
+    let framebuffer = Framebuffer::new(
+        window_width.try_into().unwrap(),
+        window_height.try_into().unwrap(),
+    );
+
+    let framebuffer2 = Framebuffer::new(
+        window_width.try_into().unwrap(),
+        window_height.try_into().unwrap(),
+    );
 
     clear_color(0.25, 0.25, 0.25);
+
+    let mut frame_buffer_camera = StaticCamera::new();
+    let mut frame_buffer2_camera = StaticCamera::new();
 
     let mut camera = Camera::new();
     let mut mouse_snapback = true;
@@ -103,6 +153,10 @@ fn main() {
 
     let mut last_frame = Instant::now();
     let start = Instant::now();
+
+    unsafe {
+        glEnable(GL_DEPTH_TEST);
+    }
 
     el.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -121,8 +175,8 @@ fn main() {
                         context
                             .window()
                             .set_cursor_position(LogicalPosition::new(
-                                window_width / 2.0,
-                                window_height / 2.0,
+                                (window_width as f32) / 2.0,
+                                (window_height as f32) / 2.0,
                             ))
                             .unwrap();
                     }
@@ -143,8 +197,8 @@ fn main() {
                 }
                 _ => (),
             },
-            Event::MainEventsCleared => unsafe {
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            Event::MainEventsCleared => {
+                gl_clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                 let dt = last_frame.elapsed().as_secs_f32();
                 last_frame = Instant::now();
@@ -153,24 +207,55 @@ fn main() {
                 // camera handling
                 camera.update_movement(&movement_state, dt);
 
+                frame_buffer2_camera.pos = quad.position() - camera.position;
+                frame_buffer_camera.pos = quad2.position() - camera.position;
+
                 shader.use_program();
 
-                let projection_matrix =
-                    glm::perspective(window_width / window_height, to_radians(90.0), 0.1, 100.0);
-
-                let camera_view = camera.view_matrix();
-
-                let model_matrix = glm::translate(&IDENTITY_MAT4, &glm::vec3(0.0, -1.75, 0.0));
-
+                let projection_matrix = glm::perspective(
+                    (window_width as f32) / (window_height as f32),
+                    to_radians(90.0),
+                    0.1,
+                    100.0,
+                );
                 shader.set_mat4("projection", &projection_matrix);
-                shader.set_mat4("view", &camera_view);
-                shader.set_mat4("model", &model_matrix);
+
+                // first render for framebuffer 1
+                framebuffer.bind();
+                gl_clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                shader.set_mat4("view", &frame_buffer_camera.view_matrix());
                 model.draw(&shader);
+                normal_plane.draw(&shader);
+                back_plane.draw(&shader);
+
+                // then render for framebuffer 2
+                framebuffer2.bind();
+                gl_clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                shader.set_mat4("view", &frame_buffer2_camera.view_matrix());
+                model.draw(&shader);
+                normal_plane.draw(&shader);
+                back_plane.draw(&shader);
+
+                // then render normal scene
+                Framebuffer::clear_binding();
+                gl_clear(GL_COLOR_BUFFER_BIT);
+                shader.set_mat4("view", &camera.view_matrix());
+                model.draw(&shader);
+                normal_plane.draw(&shader);
+                back_plane.draw(&shader);
+
+                active_texture(GL_TEXTURE0);
+                framebuffer.bind_texture();
+                shader.set_int("texture_diffuse1", 0);
+                quad.draw(&shader);
+
+                framebuffer2.bind_texture();
+                quad2.draw(&shader);
 
                 VAO::clear_binding();
 
                 context.swap_buffers().unwrap();
-            },
+            }
             _ => (),
         }
     })

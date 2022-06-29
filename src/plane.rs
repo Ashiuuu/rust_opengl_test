@@ -1,83 +1,81 @@
-use {
-    gl33::{global_loader::*, *},
-    glm::{TVec2, TVec3},
-    std::mem::size_of,
-    std::ptr,
-};
-
-use glm::{vec2, vec3};
-
 use crate::{
     draw::Draw,
-    macros::*,
+    macros::offset_of,
+    mesh::Vertex,
     shader_program::ShaderProgram,
     texture::{Texture2D, TextureType},
     utils::usize_to_glenum,
     vertex_objects::{BufferType, VAO, VBO},
 };
 
-#[repr(C)]
-pub struct Vertex {
-    pub position: TVec3<f32>,
-    pub normal: TVec3<f32>,
-    pub tex_coords: TVec2<f32>,
-}
+use {
+    core::mem::size_of,
+    gl33::{global_loader::*, *},
+    lazy_static::lazy_static,
+};
 
-impl Default for Vertex {
-    fn default() -> Self {
+lazy_static! {
+    static ref UNIT_PLANE: [Vertex; 6] = [
         Vertex {
-            position: vec3(0.0, 0.0, 0.0),
-            normal: vec3(0.0, 0.0, 0.0),
-            tex_coords: vec2(0.0, 0.0),
-        }
-    }
+            position: glm::vec3(1.0, 1.0, 0.0),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+            tex_coords: glm::vec2(1.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-1.0, -1.0, 0.0),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+            tex_coords: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(1.0, -1.0, 0.0),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+            tex_coords: glm::vec2(1.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(-1.0, 1.0, 0.0),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+            tex_coords: glm::vec2(0.0, 1.0),
+        },
+        Vertex {
+            position: glm::vec3(-1.0, -1.0, 0.0),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+            tex_coords: glm::vec2(0.0, 0.0),
+        },
+        Vertex {
+            position: glm::vec3(1.0, 1.0, 0.0),
+            normal: glm::vec3(0.0, 0.0, -1.0),
+            tex_coords: glm::vec2(1.0, 1.0),
+        },
+    ];
 }
 
-pub struct Mesh {
-    vertices: Vec<Vertex>,
-    indices: Vec<u32>,
-    textures: Vec<Texture2D>,
+pub struct Plane {
+    pub textures_loaded: Vec<Texture2D>,
     vao: VAO,
     vbo: VBO,
-    ebo: VBO,
 }
 
-impl Mesh {
-    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, textures: Vec<Texture2D>) -> Self {
-        let mut mesh = Mesh {
-            vertices,
-            indices,
-            textures,
+impl Plane {
+    pub fn new(textures: Vec<Texture2D>) -> Self {
+        let plane = Self {
+            textures_loaded: textures,
             vao: VAO::new(),
             vbo: VBO::new(BufferType::Array),
-            ebo: VBO::new(BufferType::ElementArray),
         };
 
-        mesh.setup_mesh();
-        mesh
+        plane.setup_plane();
+        plane
     }
 
-    fn setup_mesh(&mut self) {
+    fn setup_plane(&self) {
         self.vao.bind();
-
         self.vbo.bind();
+
         unsafe {
             glBufferData(
                 GL_ARRAY_BUFFER,
-                (self.vertices.len() * size_of::<Vertex>())
-                    .try_into()
-                    .unwrap(),
-                self.vertices.as_ptr().cast(),
-                GL_STATIC_DRAW,
-            );
-        }
-
-        self.ebo.bind();
-        unsafe {
-            glBufferData(
-                GL_ELEMENT_ARRAY_BUFFER,
-                (self.indices.len() * size_of::<u32>()).try_into().unwrap(),
-                self.indices.as_ptr().cast(),
+                (UNIT_PLANE.len() * size_of::<Vertex>()).try_into().unwrap(),
+                UNIT_PLANE.as_ptr().cast(),
                 GL_STATIC_DRAW,
             );
         }
@@ -108,17 +106,15 @@ impl Mesh {
                 offset_of!(Vertex, tex_coords) as *const _,
             );
         }
-
-        VAO::clear_binding();
     }
 }
 
-impl Draw for Mesh {
+impl Draw for Plane {
     fn draw(&self, shader: &ShaderProgram) {
         let mut diffuse_n = 0;
         let mut specular_n = 0;
 
-        for (i, texture) in self.textures.iter().enumerate() {
+        for (i, texture) in self.textures_loaded.iter().enumerate() {
             unsafe {
                 glActiveTexture(usize_to_glenum(0x84c0 + i));
             }
@@ -143,12 +139,7 @@ impl Draw for Mesh {
         self.vao.bind();
 
         unsafe {
-            glDrawElements(
-                GL_TRIANGLES,
-                self.indices.len().try_into().unwrap(),
-                GL_UNSIGNED_INT,
-                0 as *const _,
-            );
+            glDrawArrays(GL_TRIANGLES, 0, 6);
             glActiveTexture(GL_TEXTURE0);
         }
 

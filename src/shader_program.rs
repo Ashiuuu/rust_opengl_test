@@ -21,15 +21,14 @@ impl From<&ShaderType> for gl33::ShaderType {
 }
 
 struct Shader {
-    shader_type: ShaderType,
     id: u32,
 }
 
 impl Shader {
-    fn from_source(source: &str, shader_type: ShaderType) -> Option<Self> {
+    fn from_source(source: &str, shader_type: ShaderType) -> Self {
         let id = glCreateShader((&shader_type).into());
         if id == 0 {
-            None
+            panic!("Couldn't create shader");
         } else {
             unsafe {
                 glShaderSource(
@@ -39,11 +38,11 @@ impl Shader {
                     &(source.len().try_into().unwrap()),
                 );
             }
-            Some(Self { shader_type, id })
+            Self { id }
         }
     }
 
-    fn from_file(filename: &str, shader_type: ShaderType) -> Option<Self> {
+    fn from_file(filename: &str, shader_type: ShaderType) -> Self {
         let file_content = fs::read_to_string(filename).unwrap();
         Shader::from_source(file_content.as_str(), shader_type)
     }
@@ -87,39 +86,33 @@ impl Shader {
 
 pub struct ShaderProgram {
     id: u32,
-    vertex_shader: Shader,
-    fragment_shader: Shader,
 }
 
 impl ShaderProgram {
-    pub fn from_files(vertex_filename: &str, fragment_filename: &str) -> Option<Self> {
+    pub fn from_files(vertex_filename: &str, fragment_filename: &str) -> Self {
         let id = glCreateProgram();
-        let vertex_shader = Shader::from_file(vertex_filename, ShaderType::VertexShader)?;
+        let vertex_shader = Shader::from_file(vertex_filename, ShaderType::VertexShader);
         glAttachShader(id, vertex_shader.id);
-        let fragment_shader = Shader::from_file(fragment_filename, ShaderType::FragmentShader)?;
+        let fragment_shader = Shader::from_file(fragment_filename, ShaderType::FragmentShader);
         glAttachShader(id, fragment_shader.id);
 
-        let shader = Self {
-            id,
-            vertex_shader,
-            fragment_shader,
-        };
+        let shader = Self { id };
 
-        shader.link();
-        Some(shader)
+        shader.link(vertex_shader, fragment_shader);
+        shader
     }
 
-    fn link(&self) {
-        self.vertex_shader.compile();
-        self.fragment_shader.compile();
+    fn link(&self, vertex_shader: Shader, fragment_shader: Shader) {
+        vertex_shader.compile();
+        fragment_shader.compile();
         glLinkProgram(self.id);
 
         if self.check_linking_status().is_err() {
             panic!("Shader Program Linking Error: {}", self.error_log());
         }
 
-        self.vertex_shader.delete();
-        self.fragment_shader.delete();
+        vertex_shader.delete();
+        fragment_shader.delete();
     }
 
     pub fn use_program(&self) {

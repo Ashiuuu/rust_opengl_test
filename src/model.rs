@@ -1,11 +1,15 @@
-use glm::{vec2, vec3};
+use {
+    glm::{vec2, vec3},
+    std::path::Path,
+};
 
-use crate::texture::{Texture2D, TextureType};
-use crate::{mesh::Mesh, shader_program::ShaderProgram};
-
-use crate::mesh::Vertex;
-
-use std::path::Path;
+use crate::{
+    draw::Draw,
+    mesh::Mesh,
+    mesh::Vertex,
+    shader_program::ShaderProgram,
+    texture::{Texture2D, TextureType},
+};
 
 #[derive(Default)]
 pub struct Model {
@@ -88,8 +92,10 @@ impl Model {
         self.textures_loaded.push(texture.clone());
         texture
     }
+}
 
-    pub fn draw(&self, shader: &ShaderProgram) {
+impl Draw for Model {
+    fn draw(&self, shader: &ShaderProgram) {
         for mesh in &self.meshes {
             mesh.draw(shader);
         }
