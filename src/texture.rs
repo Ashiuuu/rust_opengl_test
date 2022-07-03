@@ -23,7 +23,8 @@ pub struct Texture2D {
 
 impl Texture2D {
     pub fn from_image(path: &str, directory: &str, ty: TextureType) -> Self {
-        let filename = format!("{}\\{}", directory, path);
+        //let filename = format!("{}\\{}", directory, path);
+        let filename = format!("{}/{}", directory, path);
 
         let image = ImageReader::open(filename).unwrap().decode().unwrap();
         //.flipv();

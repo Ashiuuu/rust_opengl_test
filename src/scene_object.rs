@@ -64,11 +64,3 @@ impl<'a> SceneObject<'a> {
         self.object.draw(shader)
     }
 }
-
-//impl<'a> Deref for SceneObject<'a> {
-//type Target = dyn Draw + 'a;
-
-//fn deref(&self) -> &Self::Target {
-//&(*self.object)
-//}
-//}
