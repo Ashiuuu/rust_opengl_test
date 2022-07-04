@@ -3,6 +3,7 @@ use {
     glm::Mat4,
     lazy_static::lazy_static,
     std::f32::consts::PI,
+    std::path::Path,
 };
 
 lazy_static! {
@@ -59,4 +60,15 @@ pub fn usize_to_glenum(e: usize) -> GLenum {
         0x84c9 => GL_TEXTURE9,
         _ => unimplemented!(),
     }
+}
+
+pub fn buid_path(dirs: &[&str]) -> String {
+    let mut ret = String::new();
+
+    for &d in dirs {
+        ret.push_str(d);
+        ret.push_str("/");
+    }
+
+    ret
 }

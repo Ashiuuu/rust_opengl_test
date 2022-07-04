@@ -1,4 +1,3 @@
-use static_camera::StaticCamera;
 use texture::Texture2D;
 
 mod camera;
@@ -11,11 +10,11 @@ mod mesh;
 mod model;
 mod plane;
 mod portal;
-mod scene;
 mod scene_object;
 mod shader_program;
 mod static_camera;
 mod texture;
+mod transform;
 mod utils;
 mod vertex_objects;
 
@@ -37,7 +36,6 @@ use {
     model::Model,
     plane::Plane,
     portal::Portal,
-    scene::Scene,
     scene_object::SceneObject,
     shader_program::ShaderProgram,
     std::time::Instant,

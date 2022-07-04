@@ -1,6 +1,7 @@
 use crate::{
     draw::Draw,
     shader_program::ShaderProgram,
+    transform::Transform,
     utils::{to_radians, IDENTITY_MAT4},
 };
 
@@ -8,41 +9,35 @@ use glm::{vec3, Mat4, TVec3};
 
 pub struct SceneObject<'a> {
     object: Box<dyn Draw + 'a>,
-    pos: TVec3<f32>,
-    angle: f32,
-    rot_axis: TVec3<f32>,
-    scale: TVec3<f32>,
+    transform: Transform,
 }
 
 impl<'a> SceneObject<'a> {
     pub fn new(object: impl Draw + 'a) -> Self {
         Self {
             object: Box::new(object),
-            pos: vec3(0.0, 0.0, 0.0),
-            angle: 0.0,
-            rot_axis: vec3(0.662, 0.2, 0.722),
-            scale: vec3(1.0, 1.0, 1.0),
+            transform: Transform::new(),
         }
     }
 
     pub fn position(&self) -> TVec3<f32> {
-        self.pos
+        self.transform.position
     }
 
     pub fn set_position(&mut self, pos: TVec3<f32>) {
-        self.pos = pos
+        self.transform.position = pos
     }
 
-    pub fn set_angle(&mut self, angle: f32) {
-        self.angle = angle
+    pub fn set_angle(&mut self, angles: TVec3<f32>) {
+        self.transform.angles = angles
     }
 
     pub fn set_rotation_axis(&mut self, axis: TVec3<f32>) {
-        self.rot_axis = axis
+        self.transform.rotation_axis = axis
     }
 
     pub fn set_scale(&mut self, scale: TVec3<f32>) {
-        self.scale = scale
+        self.transform.scale = scale
     }
 
     pub fn model_matrix(&self) -> Mat4 {
