@@ -1,11 +1,10 @@
 use {
     gl33::{global_loader::*, *},
+    glm::{vec2, vec3},
     glm::{TVec2, TVec3},
     std::mem::size_of,
     std::ptr,
 };
-
-use glm::{vec2, vec3};
 
 use crate::{
     draw::Draw,

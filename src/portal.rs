@@ -1,20 +1,20 @@
 use gl33::*;
 
 use crate::{
-    active_texture, framebuffer::Framebuffer, plane::Plane, scene_object::SceneObject,
+    active_texture, framebuffer::Framebuffer, scene_object::SceneObject,
     shader_program::ShaderProgram, static_camera::StaticCamera,
 };
 
-pub struct Portal<'a> {
-    pub surface: SceneObject<'a>,
+pub struct Portal {
+    pub surface: SceneObject,
     pub camera: StaticCamera,
     framebuffer: Framebuffer,
 }
 
-impl<'a> Portal<'a> {
+impl Portal {
     pub fn new(window_width: i32, window_height: i32) -> Self {
         Self {
-            surface: SceneObject::new(Plane::new(vec![])),
+            surface: SceneObject::plane(None),
             framebuffer: Framebuffer::new(window_width, window_height),
             camera: StaticCamera::new(),
         }

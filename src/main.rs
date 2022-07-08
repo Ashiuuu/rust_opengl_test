@@ -1,4 +1,7 @@
+use draw::Draw;
 use texture::Texture2D;
+
+use crate::{transform::AsVec3Mut, vec3_sliders::Vec3Sliders};
 
 mod camera;
 mod draw;
@@ -10,12 +13,15 @@ mod mesh;
 mod model;
 mod plane;
 mod portal;
+mod quad;
 mod scene_object;
 mod shader_program;
+mod slider;
 mod static_camera;
 mod texture;
 mod transform;
 mod utils;
+mod vec3_sliders;
 mod vertex_objects;
 
 extern crate nalgebra_glm as glm;
@@ -33,8 +39,6 @@ use {
         Api, ContextBuilder, ContextWrapper, GlRequest, PossiblyCurrent,
     },
     key_state::MovementState,
-    model::Model,
-    plane::Plane,
     portal::Portal,
     scene_object::SceneObject,
     shader_program::ShaderProgram,
@@ -92,24 +96,24 @@ fn main() {
     let window_width = context.window().inner_size().width;
     let window_height = context.window().inner_size().height;
 
+    println!("Window created: ({}, {})", window_width, window_height);
+
     init_opengl(&context);
 
     // Actual program starts here
-    //let shader = ShaderProgram::from_files("src\\model_loading.vs", "src\\model_loading.fs");
-    let shader = ShaderProgram::from_files("src/model_loading.vs", "src/model_loading.fs");
+    let shader = ShaderProgram::from_files("model_loading.vs", "model_loading.fs");
+    let gui_shader = ShaderProgram::from_files("gui.vs", "gui.fs");
 
-    //let mut model = SceneObject::new(Model::new("backpack\\backpack.obj"));
-    let mut model = SceneObject::new(Model::new("backpack/backpack.obj"));
-    let mut normal_plane = SceneObject::new(Plane::new(vec![Texture2D::from_image(
+    let mut model = SceneObject::model("backpack.obj");
+    let mut normal_plane = SceneObject::plane(Some(Texture2D::from_texture(
         "container.jpg",
-        ".",
         texture::TextureType::Diffuse,
-    )]));
-    let mut back_plane = SceneObject::new(Plane::new(vec![Texture2D::from_image(
+    )));
+    let mut back_plane = SceneObject::plane(Some(Texture2D::from_image(
         "ao.jpg",
-        "backpack",
+        "ressources/models/backpack",
         texture::TextureType::Diffuse,
-    )]));
+    )));
 
     let mut portal1 = Portal::new(
         window_width.try_into().unwrap(),
@@ -121,12 +125,11 @@ fn main() {
     );
 
     model.set_position(glm::vec3(0.0, -1.75, 0.0));
-    model.set_angle(45.0);
+    model.set_roll(45.0);
 
     normal_plane.set_position(glm::vec3(0.0, 0.0, 5.0));
-    normal_plane.set_rotation_axis(glm::vec3(1.0, 0.0, 0.0));
-    normal_plane.set_angle(90.0);
     normal_plane.set_scale(glm::vec3(10.0, 10.0, 1.0));
+    //normal_plane.set_yaw(90.0);
 
     back_plane.set_position(glm::vec3(0.0, 0.0, 4.0));
     back_plane.set_scale(glm::vec3(5.0, 5.0, 1.0));
@@ -135,9 +138,23 @@ fn main() {
     portal1.surface.set_scale(glm::vec3(5.0, 5.0, 1.0));
 
     portal2.surface.set_position(glm::vec3(0.0, 0.0, -8.0));
-    portal2.surface.set_rotation_axis(glm::vec3(0.0, 1.0, 0.0));
-    portal2.surface.set_angle(90.0);
+    portal2.surface.set_pitch(90.0);
     portal2.surface.set_scale(glm::vec3(5.0, 5.0, 1.0));
+
+    // GUI setup
+    let sliders = Vec3Sliders::new(
+        //&mut normal_plane.transform.angles,
+        normal_plane.transform.mut_angles(),
+        (50.0, 50.0),
+        200.0,
+        200.0,
+        glm::vec4(0.5, 0.5, 0.5, 0.5),
+        glm::vec4(0.5, 0.0, 0.5, 1.0),
+        window_width as f32,
+        window_height as f32,
+        50.0,
+        20.0,
+    );
 
     clear_color(0.25, 0.25, 0.25);
 
@@ -151,6 +168,7 @@ fn main() {
 
     unsafe {
         glEnable(GL_DEPTH_TEST);
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     }
 
     el.run(move |event, _, control_flow| {
@@ -185,6 +203,13 @@ fn main() {
                             VirtualKeyCode::A => movement_state.left = key.state.into(),
                             VirtualKeyCode::C => mouse_snapback = true,
                             VirtualKeyCode::V => mouse_snapback = false,
+                            //VirtualKeyCode::Right => slider.step_value(1.0),
+                            //VirtualKeyCode::Right => {
+                            //normal_plane.set_roll(normal_plane.roll() + 10.0)
+                            //}
+                            //VirtualKeyCode::Left => {
+                            //normal_plane.set_roll(normal_plane.roll() - 10.0)
+                            //}
                             VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
                             _ => (),
                         }
@@ -241,6 +266,14 @@ fn main() {
 
                 portal1.render(&shader);
                 portal2.render(&shader);
+
+                // Render GUI on top of everything
+                unsafe {
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                }
+                gui_shader.use_program();
+                sliders.draw(&gui_shader);
 
                 VAO::clear_binding();
 

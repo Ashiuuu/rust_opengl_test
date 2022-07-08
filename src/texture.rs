@@ -2,6 +2,7 @@ use image::io::Reader as ImageReader;
 
 use derive_more::Display;
 use gl33::{global_loader::*, *};
+use std::path::Path;
 
 use super::glenum_to_i32;
 
@@ -22,11 +23,22 @@ pub struct Texture2D {
 }
 
 impl Texture2D {
-    pub fn from_image(path: &str, directory: &str, ty: TextureType) -> Self {
-        //let filename = format!("{}\\{}", directory, path);
-        let filename = format!("{}/{}", directory, path);
+    pub fn from_texture(filename: &str, ty: TextureType) -> Self {
+        Texture2D::from_image(
+            filename,
+            Path::new("ressources").join("textures").to_str().unwrap(),
+            ty,
+        )
+    }
 
-        let image = ImageReader::open(filename).unwrap().decode().unwrap();
+    pub fn from_image(path: &str, directory: &str, ty: TextureType) -> Self {
+        let filename = Path::new(directory).join(path);
+        let filename_copy = filename.clone();
+
+        let image = ImageReader::open(filename)
+            .expect(format!("filename: \"{}\"", filename_copy.to_str().unwrap()).as_str())
+            .decode()
+            .unwrap();
         //.flipv();
         let format = match image {
             image::DynamicImage::ImageLuma8(_) => GL_RED,
@@ -34,6 +46,12 @@ impl Texture2D {
             image::DynamicImage::ImageRgb8(_) => GL_RGB,
             image::DynamicImage::ImageRgba8(_) => GL_RGBA,
             _ => panic!("Unsupported image format"),
+        };
+
+        let mut ret = Self {
+            id: 0,
+            ty,
+            path: path.to_owned(),
         };
 
         let mut id = 0;
@@ -69,11 +87,9 @@ impl Texture2D {
             );
         }
 
-        Self {
-            id,
-            ty,
-            path: path.to_owned(),
-        }
+        ret.id = id;
+
+        ret
     }
 
     pub fn bind(&self) {

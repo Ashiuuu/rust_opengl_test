@@ -1,9 +1,10 @@
+use glm::TVec2;
+
 use {
     gl33::{global_loader::*, *},
     glm::Mat4,
     lazy_static::lazy_static,
     std::f32::consts::PI,
-    std::path::Path,
 };
 
 lazy_static! {
@@ -62,13 +63,17 @@ pub fn usize_to_glenum(e: usize) -> GLenum {
     }
 }
 
-pub fn buid_path(dirs: &[&str]) -> String {
-    let mut ret = String::new();
+pub fn scale_with_negative(v: f32, scale: f32) -> f32 {
+    (v / (scale / 2.0)) - 1.0
+}
 
-    for &d in dirs {
-        ret.push_str(d);
-        ret.push_str("/");
-    }
+pub fn pixels_to_coords(x: f32, y: f32, window_width: f32, window_height: f32) -> (f32, f32) {
+    (
+        scale_with_negative(x, window_width),
+        -scale_with_negative(y, window_height),
+    )
+}
 
-    ret
+pub fn vec2_from_tuple(v: (f32, f32)) -> TVec2<f32> {
+    glm::vec2(v.0, v.1)
 }

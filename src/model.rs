@@ -20,9 +20,15 @@ pub struct Model {
 
 impl Model {
     pub fn new(path: &str) -> Self {
+        let (prefix, _) = path.split_once(".").unwrap();
+        let file = Path::new("ressources")
+            .join("models")
+            .join(prefix)
+            .join(path);
+
         let mut model = Model::default();
 
-        model.load(path);
+        model.load(file.as_os_str().to_str().unwrap());
 
         model
     }
@@ -38,7 +44,8 @@ impl Model {
             .into();
         let obj = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS);
 
-        let (models, materials) = obj.unwrap();
+        let (models, materials) =
+            obj.expect(format!("filename: \"{}\"", path.to_str().unwrap()).as_str());
         let materials = materials.unwrap();
         for model in models {
             let mesh = &model.mesh;

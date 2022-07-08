@@ -3,8 +3,8 @@ use crate::{
     macros::offset_of,
     mesh::Vertex,
     shader_program::ShaderProgram,
-    texture::{Texture2D, TextureType},
-    utils::usize_to_glenum,
+    texture::Texture2D,
+    utils::active_texture,
     vertex_objects::{BufferType, VAO, VBO},
 };
 
@@ -50,15 +50,15 @@ lazy_static! {
 }
 
 pub struct Plane {
-    pub textures_loaded: Vec<Texture2D>,
+    pub texture: Option<Texture2D>,
     vao: VAO,
     vbo: VBO,
 }
 
 impl Plane {
-    pub fn new(textures: Vec<Texture2D>) -> Self {
+    pub fn new(texture: Option<Texture2D>) -> Self {
         let plane = Self {
-            textures_loaded: textures,
+            texture,
             vao: VAO::new(),
             vbo: VBO::new(BufferType::Array),
         };
@@ -111,36 +111,14 @@ impl Plane {
 
 impl Draw for Plane {
     fn draw(&self, shader: &ShaderProgram) {
-        let mut diffuse_n = 0;
-        let mut specular_n = 0;
-
-        for (i, texture) in self.textures_loaded.iter().enumerate() {
-            unsafe {
-                glActiveTexture(usize_to_glenum(0x84c0 + i));
-            }
-
-            let name = &texture.ty;
-            let number = match name {
-                TextureType::Diffuse => {
-                    diffuse_n += 1;
-                    diffuse_n
-                }
-                TextureType::Specular => {
-                    specular_n += 1;
-                    specular_n
-                }
-                _ => panic!("Unknown texture type"),
-            };
-
-            shader.set_int(&format!("{}{}", name, number), i as i32);
-            texture.bind();
-        }
+        active_texture(GL_TEXTURE0);
+        shader.set_int("texture_diffuse1", 0);
+        self.texture.as_ref().map(|t| t.bind());
 
         self.vao.bind();
 
         unsafe {
             glDrawArrays(GL_TRIANGLES, 0, 6);
-            glActiveTexture(GL_TEXTURE0);
         }
 
         VAO::clear_binding();

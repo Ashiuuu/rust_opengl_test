@@ -5,6 +5,7 @@ use glm::{Mat4, Vec3, Vec4};
 
 use std::ffi::CString;
 use std::fs;
+use std::path::Path;
 
 enum ShaderType {
     VertexShader,
@@ -43,7 +44,10 @@ impl Shader {
     }
 
     fn from_file(filename: &str, shader_type: ShaderType) -> Self {
-        let file_content = fs::read_to_string(filename).unwrap();
+        let path = Path::new("ressources").join("shaders").join(filename);
+
+        let file_content =
+            fs::read_to_string(path).expect(format!("filename: \"{}\"\n", filename).as_str());
         Shader::from_source(file_content.as_str(), shader_type)
     }
 
